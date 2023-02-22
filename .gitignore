@@ -1,10 +1,5 @@
-logs/*
-!.gitkeep
 node_modules/
-tmp
-.DS_Store
+dist/
 .idea
-coverage
-dist
-.tmp
-/.nyc_output/
+.DS_Store
+*log*

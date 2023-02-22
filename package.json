@@ -1,55 +1,53 @@
 {
-  "name": "node-dymo-printer",
-  "version": "0.4.1",
-  "description": "A library to print labels from Node.js. Pure javascript cross-platform with no platform specific dependencies.",
-  "homepage": "https://github.com/kozmoz/node-dymo-printer",
-  "main": "dist/cjs/index.js",
-  "module": "dist/mjs/index.js",
-  "exports": {
-    ".": {
-      "import": "./dist/ems/dymo-services.js",
-      "require": "./dist/cjs/dymo-services.js"
-    }
-  },
-  "type": "module",
-  "scripts": {
-    "build": "rm -fr dist && mkdir dist && tsc -p tsconfig-esm.json && tsc -p tsconfig-cjs.json && . ./fixup.sh",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "bin": {
-    "node-dymo-printer": "./bin/node-dymo-printer"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/kozmoz/node-dymo-printer.git"
-  },
-  "keywords": [
-    "DYMO",
-    "LabelWriter",
-    "DYMO LabelWriter 450"
-  ],
-  "author": "Rob Juurlink",
-  "license": "ISC",
-  "dependencies": {
-    "cli": "1.0.1",
-    "jimp": "0.16.1"
-  },
-  "devDependencies": {
-    "@types/node": "17.0.7",
-    "typescript": "4.5.4"
-  },
-  "files": [
-    "dist/",
-    "bin/",
-    "demo*"
-  ],
-  "engines": {
-    "node": ">=12.0.0",
-    "npm": ">=6.0.0"
-  },
-  "os": [
-    "darwin",
-    "linux",
-    "win32"
-  ]
+    "name": "node-dymo-printer2",
+    "version": "2.0.0",
+    "description": "A library to print labels from Node.js. Pure javascript cross-platform with no platform specific dependencies.",
+    "homepage": "https://github.com/Chicken/node-dymo-printer2",
+    "main": "dist/index.js",
+    "module": "dist/index.mjs",
+    "exports": {
+        ".": {
+            "require": "./dist/index.js",
+            "import": "./dist/index.mjs"
+        }
+    },
+    "type": "module",
+    "scripts": {
+        "build": "yarn build:bundle && yarn build:rawprint",
+        "build:bundle": "rollup -c rollup.config.js",
+        "build:rawprint": "cd RawPrint && msbuild -p:Configuration=Release && cd .. && cp -f RawPrint/RP/bin/Release/{RawPrint.dll,RP.exe} RawPrint/LICENSE dist/",
+        "prepublishOnly": "yarn build"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Chicken/node-dymo-printer2.git"
+    },
+    "keywords": [
+        "DYMO",
+        "LabelWriter",
+        "DYMO LabelWriter 450"
+    ],
+    "author": "Antti <antti@antti.codes>",
+    "license": "MIT",
+    "dependencies": {
+        "jimp": "0.16.1"
+    },
+    "devDependencies": {
+        "@types/node": "17.0.7",
+        "rollup": "^3.17.2",
+        "rollup-plugin-cleaner": "^1.0.0",
+        "rollup-plugin-node-externals": "^5.1.2"
+    },
+    "files": [
+        "dist/"
+    ],
+    "engines": {
+        "node": ">=12.0.0",
+        "npm": ">=6.0.0"
+    },
+    "os": [
+        "darwin",
+        "linux",
+        "win32"
+    ]
 }

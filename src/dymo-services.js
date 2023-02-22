@@ -1,28 +1,25 @@
-import net from 'net';
-import fs from 'fs';
-import crypto from 'crypto';
-import os from 'os';
-import path from 'path';
-import {execute} from './system-services.js';
-import {convertImageToBitmap, rotateImage90DegreesCounterClockwise} from './image-services.js';
-/* jshint ignore:start */
-// noinspection ES6UnusedImports
-import Jimp from 'jimp';
-/* jshint ignore:end */
+import Jimp from "jimp";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import { convertImageToBitmap } from "./image-services.js";
+import { execute } from "./system-services.js";
 
 // Technical specifications Dymo LabelWriter 450.
 // https://download.dymo.com/dymo/user-guides/LabelWriter/LWSE450/LWSE450_TechnicalReference.pdf
 
 // Returns the printer to its power-up condition, clears all buffers, and resets all character attributes.
 // The ESC @ command is the same as the ESC * command.
-const CMD_RESET = Buffer.from([0x1b, '*'.charCodeAt(0)]);
+const CMD_RESET = Buffer.from([0x1b, "*".charCodeAt(0)]);
 // Feed to Tear Position. This command advances the most recently printed label to a position where it can be torn off.
-const CMD_FULL_FORM_FEED = Buffer.from([0x1b, 'E'.charCodeAt(0)]);
+const CMD_FULL_FORM_FEED = Buffer.from([0x1b, "E".charCodeAt(0)]);
 // Feed to Print Head. Use this command when printing multiple labels.
-const CMD_SHORT_FORM_FEED = Buffer.from([0x1b, 'G'.charCodeAt(0)]);
-const CMD_TEXT_SPEED_MODE = Buffer.from([0x1b, 'h'.charCodeAt(0)]);
-const CMD_DENSITY_NORMAL = Buffer.from([0x1b, 'e'.charCodeAt(0)]);
-const CMD_NO_DOT_TAB = Buffer.from([0x1b, 'B'.charCodeAt(0), 0]);
+const CMD_SHORT_FORM_FEED = Buffer.from([0x1b, "G".charCodeAt(0)]);
+const CMD_TEXT_SPEED_MODE = Buffer.from([0x1b, "h".charCodeAt(0)]);
+const CMD_DENSITY_NORMAL = Buffer.from([0x1b, "e".charCodeAt(0)]);
+const CMD_NO_DOT_TAB = Buffer.from([0x1b, "B".charCodeAt(0), 0]);
 
 // To reset the printer after a synchronization error or to recover from an unknown state, the host computer needs
 // to send at least 85 continuous <esc> characters to the printer. This 85-character sequence is required in case the
@@ -31,49 +28,53 @@ const CMD_NO_DOT_TAB = Buffer.from([0x1b, 'B'.charCodeAt(0), 0]);
 // https://download.dymo.com/dymo/technical-data-sheets/LW%20450%20Series%20Technical%20Reference.pdf
 const CMD_START_ESC = Buffer.from(new Array(313).fill(0x1b));
 
-const IS_WINDOWS = process.platform === 'win32';
-const IS_MACOS = process.platform === 'darwin';
-const IS_LINUX = process.platform === 'linux';
+const IS_WINDOWS = process.platform === "win32";
+const IS_MACOS = process.platform === "darwin";
+const IS_LINUX = process.platform === "linux";
 
-const PRINTER_INTERFACE_CUPS = 'CUPS';
-const PRINTER_INTERFACE_NETWORK = 'NETWORK';
-const PRINTER_INTERFACE_WINDOWS = 'WINDOWS';
-const PRINTER_INTERFACE_DEVICE = 'DEVICE';
+const PRINTER_INTERFACE_CUPS = "CUPS";
+const PRINTER_INTERFACE_NETWORK = "NETWORK";
+const PRINTER_INTERFACE_WINDOWS = "WINDOWS";
+const PRINTER_INTERFACE_DEVICE = "DEVICE";
+
+/**
+ * @typedef {Object} PrinterConfig
+ * @property {string} [interface] Printer interface (CUPS, NETWORK, WINDOWS, DEVICE)
+ * @property {string} [host] Printer host name or IP address
+ * @property {number} [port] Printer port
+ * @property {string} [deviceId] Printer device ID
+ * @property {string} [device] Printer device name
+ */
 
 /**
  * Create service that connects to configured DYMO LabelWriter.
  * If no configuration found, try to find the DYMO printer. First one found is used.
  */
 export class DymoServices {
-
-    // JSHint doesn't understand [static] class fields (yet).
-
-    /* jshint ignore:start */
-
     /**
      * Dymo 99010 labels S0722370 compatible , 89mm x 28mm (3.5inch x 1.1inch, 300dpi).
      */
     static DYMO_LABELS = {
-        '89mm x 28mm': {
-            title: '89mm x 28mm',
+        "89mm x 28mm": {
+            title: "89mm x 28mm",
             imageWidth: 964,
-            imageHeight: 300
+            imageHeight: 300,
         },
-        '89mm x 36mm': {
-            title: '89mm x 36mm',
+        "89mm x 36mm": {
+            title: "89mm x 36mm",
             imageWidth: 964,
-            imageHeight: 390
+            imageHeight: 390,
         },
-        '54mm x 25mm': {
-            title: '54mm x 25mm',
+        "54mm x 25mm": {
+            title: "54mm x 25mm",
             imageWidth: 584,
-            imageHeight: 270
-        }
+            imageHeight: 270,
+        },
     };
 
     /**
      * @private
-     * @type {{interface:string,host?:string,port?:number,deviceId?:string,device?:string}}
+     * @type {PrinterConfig}
      */
     config = {};
     /**
@@ -82,12 +83,10 @@ export class DymoServices {
      */
     chunks = [];
 
-    /* jshint ignore:end */
-
     /**
      * Create new DymoServices instance.
      *
-     * @param {{interface:string,host?:string,port?:number,deviceId?:string,device:string}} config Optional printer configuration
+     * @param {PrinterConfig} [config] Optional printer configuration
      */
     constructor(config = undefined) {
         if (config) {
@@ -96,23 +95,19 @@ export class DymoServices {
         }
     }
 
-    // noinspection JSValidateJSDoc
     /**
      * Print the image.
      * The size of the image should match the size of the label.
      *
      * @param {Jimp} image image object in landscape orientation
      * @param {number} [printCount] Number of prints (defaults to 1)
-     * @return Promise<void> Resolves in case of success, rejects otherwise
+     * @return {Promise<void>} Resolves in case of success, rejects otherwise
      */
     print(image, printCount = 1) {
         return new Promise((resolve, reject) => {
-            const rotatedImage = rotateImage90DegreesCounterClockwise(image);
-            convertImageToBitmap(rotatedImage)
-                .then(bitmapImageBuffer => {
-                    this.printBitmap(bitmapImageBuffer, printCount)
-                        .then(resolve)
-                        .catch(reject);
+            convertImageToBitmap(image)
+                .then((bitmapImageBuffer) => {
+                    this.printBitmap(bitmapImageBuffer, printCount).then(resolve).catch(reject);
                 })
                 .catch(reject);
         });
@@ -124,15 +119,13 @@ export class DymoServices {
      * @return {Promise<{deviceId:string,name:string}[]>} List of printers or empty list
      */
     listPrinters() {
-        if (!IS_WINDOWS && !IS_MACOS && !IS_LINUX) {
-            return Promise.reject('Cannot list printers, unsupported operating system: ' + process.platform);
-        }
         if (IS_WINDOWS) {
             return DymoServices.listPrintersWindows();
         }
         if (IS_MACOS || IS_LINUX) {
             return DymoServices.listPrintersMacLinux();
         }
+        return Promise.reject("Cannot list printers, unsupported operating system: " + process.platform);
     }
 
     /**
@@ -143,11 +136,11 @@ export class DymoServices {
      *
      * @param {number[][]} imageBuffer Bitmap image array, lines and rows in portrait orientation
      * @param {number} [printCount] Number of prints
-     * @return Promise<void> Resolves in case of success, rejects otherwise
+     * @return {Promise<void>} Resolves in case of success, rejects otherwise
      */
     printBitmap(imageBuffer, printCount = 1) {
         if (!imageBuffer || imageBuffer.length === 0) {
-            throw Error('Empty imageBuffer, cannot print');
+            throw Error("Empty imageBuffer, cannot print");
         }
         if (printCount <= 0) {
             throw Error(`PrintCount cannot be 0 or a negative number: ${printCount}`);
@@ -183,7 +176,6 @@ export class DymoServices {
      * @param {number} labelLength Number of lines to print (300 lines per inch)
      */
     init(labelLineWidth, labelLength) {
-
         this.clear();
 
         // To reset the printer after a synchronization error or to recover from an unknown state, the host computer
@@ -199,7 +191,7 @@ export class DymoServices {
         // This command reduces the number of bytes sent for each line.
         // E.g. 332 pixels (will be 336 dots, 42 * 8).
         const labelLineWidthBytes = Math.ceil(labelLineWidth / 8);
-        this.append(Buffer.from([0x1b, 'D'.charCodeAt(0), labelLineWidthBytes]));
+        this.append(Buffer.from([0x1b, "D".charCodeAt(0), labelLineWidthBytes]));
 
         // At power up, the label length variable is set to a default value of 3058 (in 300ths of an inch units),
         // which corresponds to approximately 10.2 inches. The Set Label Length command sequence (<esc> L nl n2)
@@ -209,9 +201,9 @@ export class DymoServices {
         // This command indicates the maximum distance the printer should travel while searching for the
         // top-of-form hole or mark.
         // E.g. 1052 pixels
-        const lsb = labelLength & 0xFF;
-        const msb = labelLength >> 8 & 0xFF;
-        this.append(Buffer.from([0x1b, 'L'.charCodeAt(0), msb, lsb]));
+        const lsb = labelLength & 0xff;
+        const msb = (labelLength >> 8) & 0xff;
+        this.append(Buffer.from([0x1b, "L".charCodeAt(0), msb, lsb]));
 
         // <esc> h Text Speed Mode (300x300 dpi)
         // This command instructs the printer to print in 300 x 300 dpi Text Quality mode.
@@ -228,7 +220,7 @@ export class DymoServices {
      *
      * Send the data to the printer.
      *
-     * @return Promise<void> Resolves in case of success, rejects otherwise
+     * @return {Promise<void>} Resolves in case of success, rejects otherwise
      */
     sendDataToPrinter() {
         return new Promise((resolve, reject) => {
@@ -238,22 +230,19 @@ export class DymoServices {
             if (!printerInterface) {
                 // Try to guess what printer to use.
                 this.listPrinters()
-                    .then(printers => {
+                    .then((printers) => {
                         // Use the first match for "LabelWriter 450".
-                        const printer = printers.find(printer => {
-                            // noinspection SpellCheckingInspection
-                            return printer.name && printer.name.toLowerCase().indexOf('dymo') !== -1;
+                        const printer = printers.find((printer) => {
+                            return printer.name && printer.name.toLowerCase().indexOf("dymo") !== -1;
                         });
                         if (!printer) {
-                            reject('Cannot find Dymo LabelWriter. Try to configure manually.');
+                            reject("Cannot find Dymo LabelWriter. Try to configure manually.");
                             return;
                         }
                         // Found a Dymo label writer.
                         this.config.interface = IS_WINDOWS ? PRINTER_INTERFACE_WINDOWS : PRINTER_INTERFACE_CUPS;
                         this.config.deviceId = printer.deviceId;
-                        this.sendDataToPrinter()
-                            .then(resolve)
-                            .catch(reject);
+                        this.sendDataToPrinter().then(resolve).catch(reject);
                     })
                     .catch(reject);
                 return;
@@ -266,21 +255,15 @@ export class DymoServices {
                 return;
             }
             if (printerInterface === PRINTER_INTERFACE_CUPS) {
-                DymoServices.sendDataToCupsPrinter(buffer, this.config.deviceId)
-                    .then(resolve)
-                    .catch(reject);
+                DymoServices.sendDataToCupsPrinter(buffer, /** @type {string} */ (this.config.deviceId)).then(resolve).catch(reject);
                 return;
             }
             if (printerInterface === PRINTER_INTERFACE_WINDOWS) {
-                DymoServices.sendDataToWindowsPrinter(buffer, this.config.deviceId)
-                    .then(resolve)
-                    .catch(reject);
+                DymoServices.sendDataToWindowsPrinter(buffer, /** @type {string} */ (this.config.deviceId)).then(resolve).catch(reject);
                 return;
             }
             if (printerInterface === PRINTER_INTERFACE_DEVICE) {
-                DymoServices.sendDataToDevicePrinter(buffer, this.config.device)
-                    .then(resolve)
-                    .catch(reject);
+                DymoServices.sendDataToDevicePrinter(buffer, /** @type {string} */ (this.config.device)).then(resolve).catch(reject);
                 return;
             }
             throw Error(`Unknown printer interface configured: "${printerInterface}"`);
@@ -303,7 +286,7 @@ export class DymoServices {
      */
     append(buff) {
         if (!Buffer.isBuffer(buff)) {
-            throw Error('append() called with type other than Buffer: ' + typeof buff);
+            throw Error("append() called with type other than Buffer: " + typeof buff);
         }
         this.chunks.push(buff);
     }
@@ -314,12 +297,17 @@ export class DymoServices {
      * Validate the configuration.
      * Throw error in case of configuration error.
      *
-     * @param {{interface:string,host?:string,port?:number,deviceId?:string}} config Config object
+     * @param {PrinterConfig} config Config object
      */
     static validateConfig(config) {
-        const INTERFACES = [PRINTER_INTERFACE_NETWORK, PRINTER_INTERFACE_CUPS, PRINTER_INTERFACE_WINDOWS, PRINTER_INTERFACE_DEVICE];
+        const INTERFACES = [
+            PRINTER_INTERFACE_NETWORK,
+            PRINTER_INTERFACE_CUPS,
+            PRINTER_INTERFACE_WINDOWS,
+            PRINTER_INTERFACE_DEVICE,
+        ];
         if (config.interface && INTERFACES.indexOf(config.interface) === -1) {
-            throw Error(`Invalid interface "${config.interface}", valid interfaces are: ${INTERFACES.join(', ')}`);
+            throw Error(`Invalid interface "${config.interface}", valid interfaces are: ${INTERFACES.join(", ")}`);
         }
     }
 
@@ -331,25 +319,25 @@ export class DymoServices {
      * @param {Buffer} buffer Printer data buffer
      * @param {string} host Hostname or IP address (defaults to localhost)
      * @param {number} port Port number (defaults to 9100)
-     * @return Promise<void> Resolves in case of success, rejects otherwise
+     * @return {Promise<void>} Resolves in case of success, rejects otherwise
      */
-    static sendDataToNetworkPrinter(buffer, host = 'localhost', port = 9100) {
+    static sendDataToNetworkPrinter(buffer, host = "localhost", port = 9100) {
         return new Promise((resolve, reject) => {
-            const networkPrinter = net.connect({host, port, timeout: 30000}, function () {
-                networkPrinter.write(buffer, 'binary', () => {
+            const networkPrinter = net.connect({ host, port, timeout: 30000 }, function () {
+                networkPrinter.write(buffer, "binary", () => {
                     networkPrinter.end();
                     resolve();
                 });
             });
 
-            networkPrinter.on('error', err => {
+            networkPrinter.on("error", (err) => {
                 networkPrinter.end();
                 reject(err);
             });
 
-            networkPrinter.on('timeout', () => {
+            networkPrinter.on("timeout", () => {
                 networkPrinter.end();
-                reject('Timeout connecting to printer.');
+                reject("Timeout connecting to printer.");
             });
         });
     }
@@ -361,14 +349,14 @@ export class DymoServices {
      *
      * @param {Buffer} buffer Printer data buffer
      * @param {string} device Device location /dev/usb/lp0
-     * @return Promise<void> Resolves in case of success, rejects otherwise
+     * @return {Promise<void>} Resolves in case of success, rejects otherwise
      */
     static sendDataToDevicePrinter(buffer, device) {
         return new Promise((resolve, reject) => {
             if (!device) {
-                throw Error('Cannot write to device, the device name is empty');
+                throw Error("Cannot write to device, the device name is empty");
             }
-            fs.writeFile(device, buffer, {encoding: 'binary'}, err => {
+            fs.writeFile(device, buffer, { encoding: "binary" }, (err) => {
                 if (err) {
                     reject(err);
                     return;
@@ -385,15 +373,15 @@ export class DymoServices {
      *
      * @param {Buffer} buffer Printer data buffer
      * @param {string} deviceId CUPS device id
-     * @return Promise<void> Resolves in case of success, rejects otherwise
+     * @return {Promise<void>} Resolves in case of success, rejects otherwise
      */
     static sendDataToCupsPrinter(buffer, deviceId) {
         return new Promise((resolve, reject) => {
             if (!deviceId) {
-                throw Error('Cannot print to CUPS printer, deviceId is not configured.');
+                throw Error("Cannot print to CUPS printer, deviceId is not configured.");
             }
-            execute('lp', ['-d', `${deviceId}`], buffer)
-                .then(resolve)
+            execute("lp", ["-d", `${deviceId}`], buffer)
+                .then(() => resolve())
                 .catch(reject);
         });
     }
@@ -405,7 +393,7 @@ export class DymoServices {
      *
      * @param {Buffer} buffer Printer data buffer
      * @param {string} deviceId Windows printer device id
-     * @return Promise<void> Resolves in case of success, rejects otherwise
+     * @return {Promise<void>} Resolves in case of success, rejects otherwise
      */
     static sendDataToWindowsPrinter(buffer, deviceId) {
         // > RawPrint "Name of Your Printer" filename
@@ -413,8 +401,8 @@ export class DymoServices {
         // https://github.com/frogmorecs/RawPrint
         return new Promise((resolve, reject) => {
             const tmp = DymoServices.tmpFile();
-            fs.writeFileSync(tmp, buffer, {encoding: 'binary'});
-            execute(path.join(__dirname, '..', 'windows', 'RawPrint.exe'), [deviceId, tmp], buffer)
+            fs.writeFileSync(tmp, buffer, { encoding: "binary" });
+            execute(path.join(__dirname, "RP.exe"), [deviceId, tmp], buffer)
                 .then(() => {
                     fs.unlinkSync(tmp);
                     resolve();
@@ -432,44 +420,41 @@ export class DymoServices {
      */
     static listPrintersMacLinux() {
         return new Promise((resolve, reject) => {
-            // noinspection SpellCheckingInspection
-            execute('lpstat', ['-e'])
-                .then(stdout => {
+            execute("lpstat", ["-e"])
+                .then((stdout) => {
                     const printers = stdout
-                        .split('\n')
-                        .filter(row => !!row.trim())
-                        .map(row => {
+                        .split("\n")
+                        .filter((row) => !!row.trim())
+                        .map((row) => {
                             return {
                                 deviceId: row.trim(),
-                                name: row.replace(/_+/g, ' ').trim(),
+                                name: row.replace(/_+/g, " ").trim(),
                             };
                         });
 
                     // Try to find the name ("Description:") of every printer found.
                     /** @type {Promise[]} */
                     const promises = [];
-                    printers.forEach(printer => {
-                        // noinspection SpellCheckingInspection
-                        promises.push(execute('lpstat', ['-l', '-p', printer.deviceId]));
+                    printers.forEach((printer) => {
+                        promises.push(execute("lpstat", ["-l", "-p", printer.deviceId]));
                     });
 
                     // Update the name for every printer description found.
-                    Promise.allSettled(promises)
-                        .then((results) => {
-                            results.forEach((result, idx) => {
-                                if (result.status === 'fulfilled' && result.value) {
-                                    const description = result.value
-                                        .split('\n')
-                                        .filter(line => /^description:/gi.test(line.trim()))
-                                        .map(line => line.replace(/description:/gi, '').trim())
-                                        .find(line => !!line);
-                                    if (description) {
-                                        printers[idx].name = description;
-                                    }
+                    Promise.allSettled(promises).then((results) => {
+                        results.forEach((result, idx) => {
+                            if (result.status === "fulfilled" && result.value) {
+                                const description = result.value
+                                    .split("\n")
+                                    .filter((line) => /^description:/gi.test(line.trim()))
+                                    .map((line) => line.replace(/description:/gi, "").trim())
+                                    .find((line) => !!line);
+                                if (description) {
+                                    printers[idx].name = description;
                                 }
-                            });
-                            resolve(printers);
+                            }
                         });
+                        resolve(printers);
+                    });
                 })
                 .catch(reject);
         });
@@ -484,11 +469,8 @@ export class DymoServices {
      */
     static listPrintersWindows() {
         return new Promise((resolve, reject) => {
-            execute('Powershell.exe', [
-                '-Command',
-                'Get-CimInstance Win32_Printer -Property DeviceID,Name'
-            ])
-                .then(stdout => {
+            execute("Powershell.exe", ["-Command", "Get-CimInstance Win32_Printer -Property DeviceID,Name"])
+                .then((stdout) => {
                     resolve(DymoServices.stdoutHandler(stdout));
                 })
                 .catch(reject);
@@ -510,7 +492,7 @@ export class DymoServices {
             .map((printer) => printer.trim())
             .filter((printer) => !!printer)
             .forEach((printer) => {
-                const {isValid, printerData} = DymoServices.isValidPrinter(printer);
+                const { isValid, printerData } = DymoServices.isValidPrinter(printer);
                 if (!isValid) {
                     return;
                 }
@@ -530,16 +512,15 @@ export class DymoServices {
      */
     static isValidPrinter(printer) {
         const printerData = {
-            deviceId: '',
-            name: '',
+            deviceId: "",
+            name: "",
         };
 
         const isValid = printer.split(/\r?\n/).some((line) => {
-            const [label, value] = line.split(':').map((el) => el.trim());
+            const [label, value] = line.split(":").map((el) => el.trim());
             const lowerLabel = label.toLowerCase();
-            // noinspection SpellCheckingInspection
-            if (lowerLabel === 'deviceid') printerData.deviceId = value;
-            if (lowerLabel === 'name') printerData.name = value;
+            if (lowerLabel === "deviceid") printerData.deviceId = value;
+            if (lowerLabel === "name") printerData.name = value;
             return !!(printerData.deviceId && printerData.name);
         });
 
@@ -561,14 +542,12 @@ export class DymoServices {
      * @return {string} Absolute filename temp file
      */
     static tmpFile(prefix, suffix, tmpdir) {
-        prefix = (typeof prefix !== 'undefined') ? prefix : 'tmp.';
-        suffix = (typeof suffix !== 'undefined') ? suffix : '';
+        prefix = typeof prefix !== "undefined" ? prefix : "tmp.";
+        suffix = typeof suffix !== "undefined" ? suffix : "";
         tmpdir = tmpdir ? tmpdir : os.tmpdir();
-        return path.join(tmpdir, prefix + crypto.randomBytes(16).toString('hex') + suffix);
+        return path.join(tmpdir, prefix + crypto.randomBytes(16).toString("hex") + suffix);
     }
 }
 
 // Make those imageService functions available via this file.
-export {createImageWithText, loadImage} from './image-services.js';
-
-
+export { createImageWithText } from "./image-services.js";

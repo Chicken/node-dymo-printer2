@@ -1,8 +1,7 @@
-import Jimp from 'jimp';
+import Jimp from "jimp";
 
 // Supported font sizes (in pixels).
 const FONT_SIZES = [8, 10, 12, 14, 16, 32, 64, 128];
-
 
 /**
  * Set the bit of given value.
@@ -26,32 +25,33 @@ function setBit(value, bitIndex) {
  * @return {string} The resulting text with newlines removed and spaces added
  */
 function simulateNewlines(font, maxTextWidth, text) {
-
     if (!font) {
-        throw Error('simulateNewlines() - font is required');
+        throw Error("simulateNewlines() - font is required");
     }
     if (!Number.isInteger(maxTextWidth)) {
-        throw Error('simulateNewlines() - maxTextWidth needs to be a positive number');
+        throw Error("simulateNewlines() - maxTextWidth needs to be a positive number");
     }
-    const minimalWidth = Jimp.measureText(font, '||');
+    const minimalWidth = Jimp.measureText(font, "||");
     if (maxTextWidth < minimalWidth) {
-        throw Error(`simulateNewlines() - maxTextWidth needs to be greater than ${minimalWidth} but is ${maxTextWidth}`);
+        throw Error(
+            `simulateNewlines() - maxTextWidth needs to be greater than ${minimalWidth} but is ${maxTextWidth}`
+        );
     }
 
-    const texts = (text || '').split('\n');
+    const texts = (text || "").split("\n");
     // No newlines in the text, nothing to do.
     if (texts.length <= 1) {
         return text;
     }
     // It contains newlines, now simulate the newline by adding spaces to force a break.
     for (let i = 0; i < texts.length - 1; i++) {
-        let width = Jimp.measureText(font, texts[i] + '|');
+        let width = Jimp.measureText(font, texts[i] + "|");
         while (width < maxTextWidth) {
-            texts[i] += ' ';
-            width = Jimp.measureText(font, texts[i] + '|');
+            texts[i] += " ";
+            width = Jimp.measureText(font, texts[i] + "|");
         }
     }
-    return texts.join('');
+    return texts.join("");
 }
 
 /**
@@ -66,7 +66,6 @@ function simulateNewlines(font, maxTextWidth, text) {
  */
 export function createImageWithText(imageWidth, imageHeight, horizontalMargin, fontSize, text) {
     return new Promise((resolve, reject) => {
-
         // Test parameters.
         if (!imageWidth || imageWidth < 0 || !Number.isInteger(imageWidth)) {
             throw Error(`createImage(): imageWidth should be a positive integer: "${imageWidth}"`);
@@ -83,29 +82,27 @@ export function createImageWithText(imageWidth, imageHeight, horizontalMargin, f
         if (!text) {
             throw Error(`createImage(): Empty text, nothing to print.`);
         }
-        if (typeof text !== 'string') {
+        if (typeof text !== "string") {
             throw Error(`createImage(): Text should be of type string.`);
         }
 
-        new Jimp(imageWidth, imageHeight, '#FFFFFF', (err, image) => {
+        new Jimp(imageWidth, imageHeight, "#FFFFFF", (err, image) => {
             if (err) {
                 reject(err);
                 return;
             }
 
             Jimp.loadFont(Jimp[`FONT_SANS_${fontSize}_BLACK`])
-                .then(font => {
-
+                .then((font) => {
                     const maxTextWidth = image.bitmap.width - 2 * horizontalMargin;
                     const maxTextHeight = image.bitmap.height;
                     const textObj = {
                         // Simulate newlines.
                         text: simulateNewlines(font, maxTextWidth, text),
                         alignmentX: Jimp.HORIZONTAL_ALIGN_LEFT,
-                        alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
+                        alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE,
                     };
                     // Print text.
-                    // noinspection JSUnresolvedFunction
                     image.print(font, horizontalMargin, 0, textObj, maxTextWidth, maxTextHeight);
 
                     resolve(image);
@@ -123,91 +120,49 @@ export function createImageWithText(imageWidth, imageHeight, horizontalMargin, f
  */
 export function convertImageToBitmap(image) {
     return new Promise((resolve) => {
-
         if (!image) {
-            throw Error('convertImageToBitmapBuffer(): parameter image is required');
+            throw Error("convertImageToBitmapBuffer(): parameter image is required");
         }
         if (!image.scan) {
-            throw Error('convertImageToBitmapBuffer(): parameter image should be of type Jimp image');
+            throw Error("convertImageToBitmapBuffer(): parameter image should be of type Jimp image");
         }
 
         // Convert to black- and white image.
-        // noinspection JSUnresolvedFunction
-        const bwImage = image
-            .opaque()
-            .greyscale()
-            .brightness(0.3)
-            .dither565()
-            .posterize(2);
+        const bwImage = image.opaque().greyscale().brightness(0.3).dither565().posterize(2);
 
         const bitmap = [];
 
         // Helper method is available to scan a region of the bitmap:
         // image.scan(x, y, w, h, f); // scan a given region of the bitmap and call the function f on every pixel
-        bwImage.scan(0, 0, bwImage.bitmap.width, bwImage.bitmap.height, (x, y, idx) => {
-            // x, y is the position of this pixel on the image.
-            // idx is the position start position of this rgba tuple in the bitmap Buffer.
+        bwImage.scan(
+            0,
+            0,
+            bwImage.bitmap.width,
+            bwImage.bitmap.height,
+            (x, y, idx) => {
+                // x, y is the position of this pixel on the image.
+                // idx is the position start position of this rgba tuple in the bitmap Buffer.
 
-            // Add new empty row.
-            if (bitmap.length <= y) {
-                const bytes = Math.ceil(bwImage.bitmap.width / 8);
-                bitmap.push(new Array(bytes).fill(0));
-            }
+                // Add new empty row.
+                if (bitmap.length <= y) {
+                    const bytes = Math.ceil(bwImage.bitmap.width / 8);
+                    bitmap.push(new Array(bytes).fill(0));
+                }
 
-            // The image is posterized, so we only have to check the "red" channel.
-            const black = (bwImage.bitmap.data[idx] < 50);
-            if (black) {
-                const row = bitmap[y];
-                // Set the right bit.
-                // Pixels from left to right, but bits from right to left. Translate this.
-                const byteIndex = Math.floor(x / 8);
-                // Set bits from left to right.
-                row[byteIndex] = setBit(row[byteIndex], [7, 6, 5, 4, 3, 2, 1, 0][x % 8]);
+                // The image is posterized, so we only have to check the "red" channel.
+                const black = bwImage.bitmap.data[idx] < 50;
+                if (black) {
+                    const row = bitmap[y];
+                    // Set the right bit.
+                    // Pixels from left to right, but bits from right to left. Translate this.
+                    const byteIndex = Math.floor(x / 8);
+                    // Set bits from left to right.
+                    row[byteIndex] = setBit(row[byteIndex], [7, 6, 5, 4, 3, 2, 1, 0][x % 8]);
+                }
+            },
+            function () {
+                resolve(bitmap);
             }
-        }, function () {
-            resolve(bitmap);
-        });
+        );
     });
 }
-
-/**
- * Convenient function to load image.
- *
- * @param {string|Buffer|Jimp} arg Path, URL, Buffer or Jimp image
- * @return {Promise<Jimp>} Promise which resolves with image when successfully loaded, rejects with error otherwise
- */
-export function loadImage(arg) {
-    return Jimp.read(arg);
-}
-
-/**
- * Because Jimp contains a bug rotating the image, we have to crop te image after rotation to keep the same width and height.
- *
- * @param {Jimp} image Image to rotate
- * @return {Jimp} New rotated image
- */
-export function rotateImage90DegreesCounterClockwise(image) {
-
-    if (!image) {
-        throw Error('rotateImage90DegreesCounterClockwise(): parameter image is required');
-    }
-    if (!image.rotate) {
-        throw Error('rotateImage90DegreesCounterClockwise(): parameter image should be of type Jimp image');
-    }
-
-    // Rotate image for label writer. Needs to be in portrait mode for printing.
-    const clonedImage = image.clone();
-    const previousWidth = clonedImage.bitmap.width;
-    const previousHeight = clonedImage.bitmap.height;
-
-    clonedImage.rotate(-90, true);
-
-    // Fix for: when rotated, the width and height of pic gets larger #808
-    // https://github.com/oliver-moran/jimp/issues/808
-    if (clonedImage.bitmap.width !== previousHeight || clonedImage.bitmap.height !== previousWidth) {
-        // Crop to original size.
-        clonedImage.crop(1, 0, previousHeight, previousWidth);
-    }
-    return clonedImage;
-}
-
