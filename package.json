@@ -1,13 +1,13 @@
 {
     "name": "node-dymo-printer2",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "description": "A library to print labels from Node.js. Pure javascript cross-platform with no platform specific dependencies.",
     "homepage": "https://github.com/Chicken/node-dymo-printer2",
-    "main": "dist/index.js",
+    "main": "dist/index.cjs",
     "module": "dist/index.mjs",
     "exports": {
         ".": {
-            "require": "./dist/index.js",
+            "require": "./dist/index.cjs",
             "import": "./dist/index.mjs"
         }
     },

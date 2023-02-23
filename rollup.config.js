@@ -6,7 +6,7 @@ export default defineConfig({
     input: "src/dymo-services.js",
     output: [
         {
-            file: "./dist/index.js",
+            file: "./dist/index.cjs",
             format: "cjs",
             exports: "named",
             sourcemap: true,
